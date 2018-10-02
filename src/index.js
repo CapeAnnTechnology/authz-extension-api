@@ -5,8 +5,10 @@ const request = require('request-promise');
 
 const log = console.log;
 
+"use strict";
+
 // Build out our basic Authz type
-export class  Authz {
+module.exports = class Authz {
 	constructor () {
 		this.credentials = {
 		  audience: 'urn:auth0-authz-api',
@@ -16,36 +18,35 @@ export class  Authz {
 		};
 	 }
 
-
 	/*
 	 * Get an access token for the Authorization Extension API.
 	 */
 	getAccessToken() {
-	  log(chalk.blue.bold('Authorize:'), `Getting access token for ${credentials.audience}`);
-	  return request.post({ uri: 'https://' + process.env.AUTH0_DOMAIN + '/oauth/token', form: credentials, json: true })
-	    .then(res => res.access_token);
+	  log(chalk.blue.bold('Authorize:'), `Getting access token for ${this.credentials.audience}`);
+	  return request.post({ uri: 'https://' + process.env.AUTH0_DOMAIN + '/oauth/token', form: this.credentials, json: true })
+	    .then(res => { this.accessToken = res.access_token; res.access_token;});
 	}
 
 	/*
 	 * Provision roles, groups and permissions.
 	 */
-	 provision(accessToken, data) {
-	  return Promise.all([ getPermissions(accessToken), getRoles(accessToken), getGroups(accessToken) ])
+	 provision(data) {
+	  return Promise.all([ this.getPermissions(), this.getRoles(), this.getGroups() ])
 	    .then(([ existingPermissions, existingRoles, existingGroups ]) => {
 	      Promise.mapSeries(data.applications, (application) =>
 	        Promise.mapSeries(application.permissions, (permission) =>
-	          createPermission(accessToken, existingPermissions, application, permission)
+	          this.createPermission(existingPermissions, application, permission)
 	        )
 	      )
 	      .then(() => Promise.mapSeries(data.applications, (application) =>
 	          Promise.mapSeries(application.roles, (role) =>
-	            createRole(accessToken, existingRoles, application, role)
-	              .then(() => addRolePermissions(accessToken, existingRoles, existingPermissions, application, role))
+	            this.createRole(existingRoles, application, role)
+	              .then(() => this.addRolePermissions(existingRoles, existingPermissions, application, role))
 	          )
 	        ))
 	      .then(() => Promise.mapSeries(data.groups, (group) =>
-	        createGroup(accessToken, existingGroups, group)
-	          .then(() => createNestedGroups(accessToken, existingGroups, group))
+	        this.createGroup(existingGroups, group)
+	          .then(() => this.createNestedGroups(existingGroups, group))
 	      ))
 	    });
 	}
@@ -53,8 +54,8 @@ export class  Authz {
 	/*
 	 * Get a list of all permissions in the extension.
 	 */
-	 getPermissions(accessToken) {
-	  return request.get({ uri: process.env.AUTHZ_API_URL + '/permissions', json: true, headers: { 'Authorization': 'Bearer ' + accessToken } })
+	 getPermissions() {
+	  return request.get({ uri: process.env.AUTHZ_API_URL + '/permissions', json: true, headers: { 'Authorization': 'Bearer ' + this.accessToken } })
 	    .then(res => {
 	      log(chalk.green.bold('Permissions:'), `Loaded ${res.permissions.length} permissions.`);
 	      return res.permissions;
@@ -64,7 +65,7 @@ export class  Authz {
 	/*
 	 * Create a permission if it doesn't exist yet.
 	 */
-	 createPermission(accessToken, existingPermissions, application, permission) {
+	 createPermission(existingPermissions, application, permission) {
 	  const existingPermission = _.find(existingPermissions, { applicationId: application.id, name: permission });
 	  if (existingPermission) {
 	    return Promise.resolve(true);
@@ -77,7 +78,7 @@ export class  Authz {
 	    applicationId: application.id
 	  };
 
-	  return request.post({ uri: process.env.AUTHZ_API_URL + '/permissions', json: payload, headers: { 'Authorization': 'Bearer ' + accessToken } })
+	  return request.post({ uri: process.env.AUTHZ_API_URL + '/permissions', json: payload, headers: { 'Authorization': 'Bearer ' + this.accessToken } })
 	    .then((createdPermission) => {
 	      existingPermissions.push(createdPermission);
 	      log(chalk.green.bold('Permission:'), `Created ${permission}`);
@@ -88,8 +89,8 @@ export class  Authz {
 	/*
 	 * Get a list of all roles in the extension.
 	 */
-	 getRoles(accessToken) {
-	  return request.get({ uri: process.env.AUTHZ_API_URL + '/roles', json: true, headers: { 'Authorization': 'Bearer ' + accessToken } })
+	 getRoles() {
+	  return request.get({ uri: process.env.AUTHZ_API_URL + '/roles', json: true, headers: { 'Authorization': 'Bearer ' + this.accessToken } })
 	    .then(res => {
 	      log(chalk.green.bold('Roles:'), `Loaded ${res.roles.length} roles.`);
 	      return res.roles;
@@ -99,7 +100,7 @@ export class  Authz {
 	/*
 	 * Create a role if it doesn't exist yet.
 	 */
-	 createRole(accessToken, existingRoles, application, role) {
+	 createRole(existingRoles, application, role) {
 	  const existingRole = _.find(existingRoles, { applicationId: application.id, name: role.name });
 	  if (existingRole) {
 	    return Promise.resolve(true);
@@ -112,7 +113,7 @@ export class  Authz {
 	    applicationId: application.id
 	  };
 
-	  return request.post({ uri: process.env.AUTHZ_API_URL + '/roles', json: payload, headers: { 'Authorization': 'Bearer ' + accessToken } })
+	  return request.post({ uri: process.env.AUTHZ_API_URL + '/roles', json: payload, headers: { 'Authorization': 'Bearer ' + this.accessToken } })
 	    .then((createdRole) => {
 	      existingRoles.push(createdRole);
 	      log(chalk.green.bold('Role:'), `Created ${role.name}`);
@@ -123,7 +124,7 @@ export class  Authz {
 	/*
 	 * Add permsisions to role
 	 */
-	 addRolePermissions(accessToken, existingRoles, existingPermissions, application, role) {
+	 addRolePermissions(existingRoles, existingPermissions, application, role) {
 	  if (!role.permissions || role.permissions.length == 0) {
 	    return Promise.resolve();
 	  }
@@ -137,7 +138,7 @@ export class  Authz {
 	  });
 
 	  log(chalk.blue.bold('Role:'), `Adding permissions to ${existingRole.name} (${existingRoleId})...`);
-	  return request.put({ uri: process.env.AUTHZ_API_URL + '/roles/' + existingRoleId, json: existingRole, headers: { 'Authorization': 'Bearer ' + accessToken } })
+	  return request.put({ uri: process.env.AUTHZ_API_URL + '/roles/' + existingRoleId, json: existingRole, headers: { 'Authorization': 'Bearer ' + this.accessToken } })
 	    .then(() => {
 	      log(chalk.green.bold('Role:'), `Added ${existingRole.permissions.length} permissions ${role.name}`);
 	      return Promise.resolve(true);
@@ -148,8 +149,8 @@ export class  Authz {
 	/*
 	 * Get a list of all groups in the extension.
 	 */
-	 getGroups(accessToken) {
-	  return request.get({ uri: process.env.AUTHZ_API_URL + '/groups', json: true, headers: { 'Authorization': 'Bearer ' + accessToken } })
+	 getGroups() {
+	  return request.get({ uri: process.env.AUTHZ_API_URL + '/groups', json: true, headers: { 'Authorization': 'Bearer ' + this.accessToken } })
 	    .then(res => {
 	      log(chalk.green.bold('Groups:'), `Loaded ${res.groups.length} groups.`);
 	      return res.groups;
@@ -159,7 +160,7 @@ export class  Authz {
 	/*
 	 * Create a group if it doesn't exist yet.
 	 */
-	createGroup(accessToken, existingGroups, group) {
+	createGroup(existingGroups, group) {
 	  const existingGroup = _.find(existingGroups, { name: group.name });
 	  if (existingGroup) {
 	    return Promise.resolve(true);
@@ -170,7 +171,7 @@ export class  Authz {
 	    description: group.description
 	  };
 
-	  return request.post({ uri: process.env.AUTHZ_API_URL + '/groups', json: payload, headers: { 'Authorization': 'Bearer ' + accessToken } })
+	  return request.post({ uri: process.env.AUTHZ_API_URL + '/groups', json: payload, headers: { 'Authorization': 'Bearer ' + this.accessToken } })
 	    .then((createdGroup) => {
 	      existingGroups.push(createdGroup);
 	      log(chalk.green.bold('Group:'), `Created ${group.name}`);
@@ -181,7 +182,7 @@ export class  Authz {
 	/*
 	 * Create add nested groups to a group.
 	 */
-	 createNestedGroups(accessToken, existingGroups, group) {
+	 createNestedGroups(existingGroups, group) {
 	  if (!group.nested || group.nested.length == 0) {
 	    return Promise.resolve();
 	  }
@@ -192,11 +193,11 @@ export class  Authz {
 	    return nestedGroup._id;
 	  });
 
-	  return request.patch({ uri: process.env.AUTHZ_API_URL + '/groups/' + existingGroup._id + '/nested', json: payload, headers: { 'Authorization': 'Bearer ' + accessToken } })
+	  return request.patch({ uri: process.env.AUTHZ_API_URL + '/groups/' + existingGroup._id + '/nested', json: payload, headers: { 'Authorization': 'Bearer ' + this.accessToken } })
 	    .then(() => {
 	      log(chalk.green.bold('Nested Group:'), `Added ${group.nested.join(', ')} to ${group.name}`);
 	      return Promise.resolve(true);
 	    });
 	}
 
-}
+};
