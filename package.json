@@ -1,7 +1,7 @@
 {
   "name": "authz-extension-api",
   "description": "API tool showing how you can provision groups, roles and permissions with the Authorization Extension API",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "main": "src/index.js",
   "author": "Auth0",
   "license": "MIT",

@@ -1,6 +1,6 @@
 # Authorization Extension Provisioning Tool
 
-This sample tool shows how you can provision groups, roles and permissions in the Authorization Extension using the API.
+This sample tool shows how you can provision groups, roles and permissions in the Authorization Extension using the API with a simple node package.
 
 ## Configuring the Extension
 
@@ -20,11 +20,11 @@ Go to your Auth0 account and create a non-interactive client. Authorize it for t
 
 ![](/screenshots/configure-account.png)
 
-Also create 2 normal clients and give them a name like "Timesheet App" and "Expenses App". In the `data.json` file, search for `timesheet-app-id` and `expense-app-id` and replace these with the Client IDs of your clients.
+Also create a normal client and give them a name like "Timesheet App". In the `data` array, search for `timesheet-app-id` and replace these with the Client ID of your client.
 
 ## Configure the Provisioning Tool
 
-Update the `.env` file with these settings:
+Update the `process.env` with these settings:
 
 ```
 AUTH0_DOMAIN=your-domain.auth0.com
@@ -38,10 +38,95 @@ AUTHZ_API_URL=https://url-of-the-extension-api-which-you-see-on-the-api-tab/api
 Now run the tool:
 
 ```
-yarn install
-node index
-```
+const Authz = require('authz-extension-api');
 
-![](/screenshots/run-tool.png)
+const authz = new Authz();
+
+const data = {
+  "applications": [
+    {
+      "id": "timesheet-app-id",
+      "permissions": [
+        "read:own-TimeStamps",
+        "update:own-TimeStamps",
+        "read:TimeStamps",
+        "update:TimeStamps",
+        "approve:TimeStamps",
+        "reject:TimeStamps"
+      ],
+      "roles": [
+        {
+          "name": "Timeclock Admin",
+          "description": "Role given to contractors",
+          "permissions": [
+            "read:own-TimeStamps",
+            "update:own-TimeStamps"
+          ]
+        },
+        {
+          "name": "Timeclock Owner",
+          "description": "Role given to users that can manage TimeStamps",
+          "permissions": [
+            "read:TimeStamps",
+            "update:TimeStamps",
+            "approve:TimeStamps",
+            "reject:TimeStamps"
+          ]
+        }
+      ]
+    },
+  ],
+  "groups": [
+    {
+      "name": "Sales",
+      "description":"test"
+    },
+    {
+      "name": "Research & Development",
+      "description":"test",
+      "nested": [
+        "Sales"
+      ]
+    }
+  ]
+};
+
+/*
+ * Provision roles, groups and permissions.
+ */
+authz.getAccessToken()
+  .then(accessToken => authz.provision(data))
+  .catch(err => {
+    log(chalk.red.bold('Error:'), JSON.stringify({ error: err.error || err.message, options: err.options }, null, 2));
+  });
+
+/*
+ * Provision just permissions.
+ */
+authz.getAccessToken()
+  .then(accessToken => authz.provisionPermissions(data))
+  .catch(err => {
+    log(chalk.red.bold('Error:'), JSON.stringify({ error: err.error || err.message, options: err.options }, null, 2));
+  });
+
+/*
+ * Provision roles and permissions.
+ */
+authz.getAccessToken()
+  .then(accessToken => authz.provisionRoles(data))
+  .catch(err => {
+    log(chalk.red.bold('Error:'), JSON.stringify({ error: err.error || err.message, options: err.options }, null, 2));
+  });
+
+/*
+ * Provision just groups.
+ */
+authz.getAccessToken()
+  .then(accessToken => authz.provisionGroups(data))
+  .catch(err => {
+    log(chalk.red.bold('Error:'), JSON.stringify({ error: err.error || err.message, options: err.options }, null, 2));
+  });
+
+```
 
 Go back to your extension and you'll see that it's filled with data.
