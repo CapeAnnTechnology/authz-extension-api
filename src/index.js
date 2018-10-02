@@ -52,6 +52,53 @@ module.exports = class Authz {
 	}
 
 	/*
+	 * Provision permissions.
+	 * @since: 1.2.1
+	 */
+	 provisionPermissions(data) {
+	  return Promise.all([ this.getPermissions() ])
+	    .then(([ existingPermissions ]) => {
+	      Promise.mapSeries(data.applications, (application) =>
+	        Promise.mapSeries(application.permissions, (permission) =>
+	          this.createPermission(existingPermissions, application, permission)
+	        )
+	      )
+	    });
+	}
+
+	/*
+	 * Provision roles.
+	 * @since: 1.2.1
+	 */
+	 provisionRoles(data) {
+	  return Promise.all([ this.getPermissions(), this.getRoles() ])
+	    .then(([ existingPermissions, existingRoles ]) => {
+	      Promise.mapSeries(data.applications, (application) =>
+	          Promise.mapSeries(application.roles, (role) =>
+	            this.createRole(existingRoles, application, role)
+	              .then(() => this.addRolePermissions(existingRoles, existingPermissions, application, role))
+	          )
+	      )
+	    });
+	}
+
+	/*
+	 * Provision groups.
+	 * @since: 1.2.1
+	 */
+	 provisionGroups(data) {
+	  return Promise.all([ this.getGroups() ])
+	    .then(([ existingGroups ]) => {
+	      Promise.mapSeries(data.applications, (application) =>
+	        Promise.mapSeries(data.groups, (group) =>
+	        this.createGroup(existingGroups, group)
+	          .then(() => this.createNestedGroups(existingGroups, group))
+	        )
+	       )
+	    });
+	}
+
+	/*
 	 * Get a list of all permissions in the extension.
 	 */
 	 getPermissions() {
@@ -189,7 +236,7 @@ module.exports = class Authz {
 
 	  const existingGroup = _.find(existingGroups, { name: group.name });
 	  const payload = group.nested.map(nestedGroupName => {
-	    const nestedGroup = _.find(existingGroups, { name: nestedGroupName.name, description: nestedGroupName.description });
+	    const nestedGroup = _.find(existingGroups, { name: nestedGroupName });
 	    return nestedGroup._id;
 	  });
 
